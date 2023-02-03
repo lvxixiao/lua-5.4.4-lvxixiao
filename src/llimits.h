@@ -63,6 +63,7 @@ typedef signed char ls_byte;
 /*
 ** test whether an unsigned value is a power of 2 (or zero)
 */
+// 是否为2幂或者0
 #define ispow2(x)	(((x) & ((x) - 1)) == 0)
 
 

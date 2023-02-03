@@ -43,7 +43,8 @@
 ** MAXABITS is the largest integer such that MAXASIZE fits in an
 ** unsigned int.
 */
-#define MAXABITS	cast_int(sizeof(int) * CHAR_BIT - 1)
+//数组size以2为底的对数 31
+#define MAXABITS	cast_int(sizeof(int) * CHAR_BIT - 1) //31
 
 
 /*
@@ -105,9 +106,10 @@ static const TValue absentkey = {ABSTKEYCONSTANT};
 ** remainder, which is faster. Otherwise, use an unsigned-integer
 ** remainder, which uses all bits and ensures a non-negative result.
 */
+// 返回 i 对应的散列表元素
 static Node *hashint (const Table *t, lua_Integer i) {
   lua_Unsigned ui = l_castS2U(i);
-  if (ui <= (unsigned int)INT_MAX)
+  if (ui <= (unsigned int)INT_MAX)  //作者认为32位的除法比64位的除法快
     return hashmod(t, cast_int(ui));
   else
     return hashmod(t, ui);
@@ -148,6 +150,7 @@ static int l_hashfloat (lua_Number n) {
 ** returns the 'main' position of an element in a table (that is,
 ** the index of its hash value).
 */
+// 返回 key 对应散列表位置上的 Node*
 static Node *mainpositionTV (const Table *t, const TValue *key) {
   switch (ttypetag(key)) {
     case LUA_VNUMINT: {
@@ -185,7 +188,7 @@ static Node *mainpositionTV (const Table *t, const TValue *key) {
   }
 }
 
-
+// 找到*nd在hash表中的位置
 l_sinline Node *mainpositionfromnode (const Table *t, Node *nd) {
   TValue key;
   getnodekey(cast(lua_State *, NULL), &key, nd);
@@ -241,6 +244,7 @@ static int equalkey (const TValue *k1, const Node *n2, int deadok) {
 ** part of table 't'. (Otherwise, the array part must be larger than
 ** 'alimit'.)
 */
+//如果数组部分的真实size 等于 alimit 返回 true
 #define limitequalsasize(t)	(isrealasize(t) || ispow2((t)->alimit))
 
 
@@ -277,14 +281,15 @@ static int ispow2realasize (const Table *t) {
   return (!isrealasize(t) || ispow2(t->alimit));
 }
 
-
+// 设置alimit为数组部分的实际大小,并设置对应的flags, 返回表数组部分的实际大小
 static unsigned int setlimittosize (Table *t) {
-  t->alimit = luaH_realasize(t);
+  t->alimit = luaH_realasize(t); 
   setrealasize(t);
   return t->alimit;
 }
 
 
+// 获取数组部分的真实长度
 #define limitasasize(t)	check_exp(isrealasize(t), t->alimit)
 
 
@@ -386,6 +391,7 @@ static void freehash (lua_State *L, Table *t) {
 ** will go to the array part; return the optimal size.  (The condition
 ** 'twotoi > 0' in the for loop stops the loop if 'twotoi' overflows.)
 */
+//最终确定数组的大小, 要求数组中的key要超过数组容量的一半
 static unsigned int computesizes (unsigned int nums[], unsigned int *pna) {
   int i;
   unsigned int twotoi;  /* 2^i (candidate for optimal size) */
@@ -424,6 +430,10 @@ static int countint (lua_Integer key, unsigned int *nums) {
 ** number of keys that will go into corresponding slice and return
 ** total number of non-nil keys.
 */
+/*
+  统计数组部分总数
+  数组是有按片划分的, 每一次扩容为一片, 即按照 2^(lg - 1) < k <= 2^lg 的规则切片(lua数组从1开始)
+*/
 static unsigned int numusearray (const Table *t, unsigned int *nums) {
   int lg;
   unsigned int ttlg;  /* 2^lg */
@@ -434,7 +444,7 @@ static unsigned int numusearray (const Table *t, unsigned int *nums) {
   for (lg = 0, ttlg = 1; lg <= MAXABITS; lg++, ttlg *= 2) {
     unsigned int lc = 0;  /* counter */
     unsigned int lim = ttlg;
-    if (lim > asize) {
+    if (lim > asize) {  //超过数组长度了, 没必要继续统计了
       lim = asize;  /* adjust upper limit */
       if (i > lim)
         break;  /* no more elements to count */
@@ -451,13 +461,14 @@ static unsigned int numusearray (const Table *t, unsigned int *nums) {
 }
 
 
+// hash部分的数量, key为 integer 的会统计到 pna 中
 static int numusehash (const Table *t, unsigned int *nums, unsigned int *pna) {
   int totaluse = 0;  /* total number of elements */
   int ause = 0;  /* elements added to 'nums' (can go to array part) */
   int i = sizenode(t);
   while (i--) {
     Node *n = &t->node[i];
-    if (!isempty(gval(n))) {
+    if (!isempty(gval(n))) {//遍历所有节点，对于整数key，通过countint函数检查，如果是有效的整数key，则统计到nums数组对应的位置，并累加到totaluse变量
       if (keyisinteger(n))
         ause += countint(keyival(n), nums);
       totaluse++;
@@ -468,6 +479,7 @@ static int numusehash (const Table *t, unsigned int *nums, unsigned int *pna) {
 }
 
 
+//创建数组的 hash 部分
 /*
 ** Creates an array for the hash part of a table with the given
 ** size, or reuses the dummy node if size is zero.
@@ -487,8 +499,8 @@ static void setnodevector (lua_State *L, Table *t, unsigned int size) {
     if (lsize > MAXHBITS || (1u << lsize) > MAXHSIZE)
       luaG_runerror(L, "table overflow");
     size = twoto(lsize); //获得容量
-    t->node = luaM_newvector(L, size, Node); //分配内存
-    for (i = 0; i < (int)size; i++) { //初始化内存
+    t->node = luaM_newvector(L, size, Node); //申请内存
+    for (i = 0; i < (int)size; i++) { //初始化
       Node *n = gnode(t, i);
       gnext(n) = 0;
       setnilkey(n);
@@ -551,37 +563,40 @@ static void exchangehashpart (Table *t1, Table *t2) {
 void luaH_resize (lua_State *L, Table *t, unsigned int newasize,
                                           unsigned int nhsize) {
   unsigned int i;
-  Table newt;  /* to keep the new hash part */
+  Table newt;  /* to keep the new hash part */ // newt用来中转的
   unsigned int oldasize = setlimittosize(t);
   TValue *newarray;
   /* create new hash part with appropriate size into 'newt' */
   setnodevector(L, &newt, nhsize);
-  if (newasize < oldasize) {  /* will array shrink? */
+  if (newasize < oldasize) {  /* will array shrink? */ //数组部分需要缩小
     t->alimit = newasize;  /* pretend array has new size... */
+    // 交换hash部分
     exchangehashpart(t, &newt);  /* and new hash */
     /* re-insert into the new hash the elements from vanishing slice */
-    for (i = newasize; i < oldasize; i++) {
+    for (i = newasize; i < oldasize; i++) { //超出容量的部分放入hash部分
       if (!isempty(&t->array[i]))
         luaH_setint(L, t, i + 1, &t->array[i]);
     }
     t->alimit = oldasize;  /* restore current size... */
+    // hash部分交换回来, 此时 newt 里的 hash 部分是数组缩容后超出的部分
     exchangehashpart(t, &newt);  /* and hash (in case of errors) */
   }
-  /* allocate new array */
+  /* allocate new array */ //重新分配数组
   newarray = luaM_reallocvector(L, t->array, oldasize, newasize, TValue);
   if (l_unlikely(newarray == NULL && newasize > 0)) {  /* allocation failed? */
-    freehash(L, &newt);  /* release new hash part */
+    freehash(L, &newt);  /* release new hash part */  //内存分配失败
     luaM_error(L);  /* raise error (with array unchanged) */
   }
   /* allocation ok; initialize new part of the array */
+  // 交换hash部分, 此时 newt 的 hash 部分是原先 t 的hash部分, t 里可能是数组缩容后存入的数据也可能是空(数组不需要缩容就为空)
   exchangehashpart(t, &newt);  /* 't' has the new hash ('newt' has the old) */
   t->array = newarray;  /* set new array part */
   t->alimit = newasize;
   for (i = oldasize; i < newasize; i++)  /* clear new slice of the array */
      setempty(&t->array[i]);
   /* re-insert elements from old hash part into new parts */
-  reinsert(L, &newt, t);  /* 'newt' now has the old hash */
-  freehash(L, &newt);  /* free old hash part */
+  reinsert(L, &newt, t);  /* 'newt' now has the old hash */ // 中转数据中旧的hash数据插入新的hash表
+  freehash(L, &newt);  /* free old hash part */ //释放newt的内存
 }
 
 
@@ -594,24 +609,24 @@ void luaH_resizearray (lua_State *L, Table *t, unsigned int nasize) {
 ** nums[i] = number of keys 'k' where 2^(i - 1) < k <= 2^i
 */
 static void rehash (lua_State *L, Table *t, const TValue *ek) {
-  unsigned int asize;  /* optimal size for array part */
-  unsigned int na;  /* number of keys in the array part */
-  unsigned int nums[MAXABITS + 1];
+  unsigned int asize;  /* optimal size for array part */  //最优的数组大小
+  unsigned int na;  /* number of keys in the array part */ //数组部分的元素个数
+  unsigned int nums[MAXABITS + 1]; //nums[32]
   int i;
   int totaluse;
   for (i = 0; i <= MAXABITS; i++) nums[i] = 0;  /* reset counts */
-  setlimittosize(t);
+  setlimittosize(t); //设置 alimit 为实际大小, 因为 alimit 有时候并不是数组的长度
   na = numusearray(t, nums);  /* count keys in array part */
   totaluse = na;  /* all those keys are integer keys */
   totaluse += numusehash(t, nums, &na);  /* count keys in hash part */
   /* count extra key */
-  if (ttisinteger(ek))
+  if (ttisinteger(ek))  //新的key如果也是integer, 看看需不需要放进数组
     na += countint(ivalue(ek), nums);
   totaluse++;
   /* compute new size for array part */
-  asize = computesizes(nums, &na);
+  asize = computesizes(nums, &na);  //最终确定数组的大小, 要求数组中key要有容量的一半以上
   /* resize the table to new computed sizes */
-  luaH_resize(L, t, asize, totaluse - na);
+  luaH_resize(L, t, asize, totaluse - na); //根据新的数组大小和散列表部分存入的元素个数调整数组大小和散列表大小
 }
 
 
@@ -620,7 +635,7 @@ static void rehash (lua_State *L, Table *t, const TValue *ek) {
 ** }=============================================================
 */
 
-
+// 构造一张表
 Table *luaH_new (lua_State *L) {
   GCObject *o = luaC_newobj(L, LUA_VTABLE, sizeof(Table));
   Table *t = gco2t(o);
@@ -640,6 +655,7 @@ void luaH_free (lua_State *L, Table *t) {
 }
 
 
+// 找hash表上的空节点
 static Node *getfreepos (Table *t) {
   if (!isdummy(t)) {
     while (t->lastfree > t->node) {
@@ -663,37 +679,46 @@ static Node *getfreepos (Table *t) {
 void luaH_newkey (lua_State *L, Table *t, const TValue *key, TValue *value) {
   Node *mp;
   TValue aux;
-  if (l_unlikely(ttisnil(key)))
+  if (l_unlikely(ttisnil(key))) // key 不能是 nil
     luaG_runerror(L, "table index is nil");
-  else if (ttisfloat(key)) {
+  else if (ttisfloat(key)) {  // key 是 float 转为 int
     lua_Number f = fltvalue(key);
     lua_Integer k;
     if (luaV_flttointeger(f, &k, F2Ieq)) {  /* does key fit in an integer? */
       setivalue(&aux, k);
       key = &aux;  /* insert it as an integer */
     }
-    else if (l_unlikely(luai_numisnan(f)))
+    else if (l_unlikely(luai_numisnan(f)))//因为根据IEEE 754，nan值被认为不等于任何值，包括它自己
       luaG_runerror(L, "table index is NaN");
   }
-  if (ttisnil(value))
+  if (ttisnil(value)) // value 是 nil 直接返回
     return;  /* do not insert nil values */
-  mp = mainpositionTV(t, key);
+  mp = mainpositionTV(t, key); // mp是应该插入的节点
   if (!isempty(gval(mp)) || isdummy(t)) {  /* main position is taken? */
+    // mp节点有值 或者 hash 表为空
+
     Node *othern;
     Node *f = getfreepos(t);  /* get a free place */
     if (f == NULL) {  /* cannot find a free place? */
-      rehash(L, t, key);  /* grow table */
+      rehash(L, t, key);  /* grow table */ // 没有空节点了, 扩容
       /* whatever called 'newkey' takes care of TM cache */
       luaH_set(L, t, key, value);  /* insert key into grown table */
       return;
     }
     lua_assert(!isdummy(t));
-    othern = mainpositionfromnode(t, mp);
+    //mp节点发生了碰撞, 此时存在两种情况
+    //  1.现在存放在这里的对象hash值不是这里, 是因为跟其他位置发生碰撞后存放在这里的, 需要将其放在第一个空位上，
+    //      并且他的上一个节点的next需要修改指向新的节点, 自身的next因为位置改变也要修改，但是指向是不变的。处理完后将新对象放入当前位置。
+    //  2.现在存放在这里的对象hash值也是这里，将要插入对象放入第一个空位，然后修改next链表，新插入对象在next链上的第二个位置。
+    //    即 key1->next = key2 , 插入key3 则 key1->next = key3, key3->next = key2
+    othern = mainpositionfromnode(t, mp); //找到mp节点应该在的位置
     if (othern != mp) {  /* is colliding node out of its main position? */
       /* yes; move colliding node into free position */
       while (othern + gnext(othern) != mp)  /* find previous */
         othern += gnext(othern);
       gnext(othern) = cast_int(f - othern);  /* rechain to point to 'f' */
+      // 这里 f 还是不等于 mp, 只是内容一样
+      // mp指向的值复制到f指向的值
       *f = *mp;  /* copy colliding node into free pos. (mp->next also goes) */
       if (gnext(mp) != 0) {
         gnext(f) += cast_int(mp - f);  /* correct 'next' */
@@ -704,16 +729,16 @@ void luaH_newkey (lua_State *L, Table *t, const TValue *key, TValue *value) {
     else {  /* colliding node is in its own main position */
       /* new node will go into free position */
       if (gnext(mp) != 0)
-        gnext(f) = cast_int((mp + gnext(mp)) - f);  /* chain new position */
+        gnext(f) = cast_int((mp + gnext(mp)) - f);  /* chain new position */ //f->next = mp->next
       else lua_assert(gnext(f) == 0);
-      gnext(mp) = cast_int(f - mp);
+      gnext(mp) = cast_int(f - mp); // mp + mp->next = f 即 mp->next 指向 f
       mp = f;
     }
   }
-  setnodekey(L, mp, key);
-  luaC_barrierback(L, obj2gco(t), key);
-  lua_assert(isempty(gval(mp)));
-  setobj2t(L, gval(mp), value);
+  setnodekey(L, mp, key); //主位置设置key
+  luaC_barrierback(L, obj2gco(t), key);//gc相关
+  lua_assert(isempty(gval(mp)));  //val必须为空, 按照上面逻辑这里正常不会有异常。
+  setobj2t(L, gval(mp), value);   //value赋值到mp->i_val
 }
 
 
@@ -725,13 +750,15 @@ void luaH_newkey (lua_State *L, Table *t, const TValue *key, TValue *value) {
 ** one more than the limit (so that it can be incremented without
 ** changing the real size of the array).
 */
+// 通过 int类型 key获取对应的TValue, 会优先从数组部分找
 const TValue *luaH_getint (Table *t, lua_Integer key) {
   if (l_castS2U(key) - 1u < t->alimit)  /* 'key' in [1, t->alimit]? */
     return &t->array[key - 1];
-  else if (!limitequalsasize(t) &&  /* key still may be in the array part? */
+  else if (!limitequalsasize(t) &&  /* key still may be in the array part? */ // alimit有可能不是真实长度,处理一下再判断
            (l_castS2U(key) == t->alimit + 1 ||
             l_castS2U(key) - 1u < luaH_realasize(t))) {
-    t->alimit = cast_uint(key);  /* probably '#t' is here now */
+
+    t->alimit = cast_uint(key);  /* probably '#t' is here now */ //设置 alimit 为 key
     return &t->array[key - 1];
   }
   else {
@@ -783,14 +810,20 @@ const TValue *luaH_getstr (Table *t, TString *key) {
 /*
 ** main search function
 */
+// 获得 key 对应的 TValue, 有三种情况
+// 1. 整数 key 如果落在数组部分会返回数组里的 TValue
+// 2. 如果 hash 部分有这个 key 对应的值, 返回这个值
+// 3. 返回一个 absentkey, 表示空
 const TValue *luaH_get (Table *t, const TValue *key) {
   switch (ttypetag(key)) {
-    case LUA_VSHRSTR: return luaH_getshortstr(t, tsvalue(key));
-    case LUA_VNUMINT: return luaH_getint(t, ivalue(key));
-    case LUA_VNIL: return &absentkey;
-    case LUA_VNUMFLT: {
+    case LUA_VSHRSTR: // 短字符串
+      return luaH_getshortstr(t, tsvalue(key));
+    case LUA_VNUMINT: // int类型
+      return luaH_getint(t, ivalue(key));
+    case LUA_VNIL: return &absentkey; // nil
+    case LUA_VNUMFLT: { // float 类型
       lua_Integer k;
-      if (luaV_flttointeger(fltvalue(key), &k, F2Ieq)) /* integral index? */
+      if (luaV_flttointeger(fltvalue(key), &k, F2Ieq)) /* integral index? */  //强转为 int, 然后按照 int 处理
         return luaH_getint(t, k);  /* use specialized version */
       /* else... */
     }  /* FALLTHROUGH */
@@ -808,9 +841,13 @@ const TValue *luaH_get (Table *t, const TValue *key) {
 */
 void luaH_finishset (lua_State *L, Table *t, const TValue *key,
                                    const TValue *slot, TValue *value) {
-  if (isabstkey(slot))
+  // slot 为 luaH_get(t, key) 找到的值
+                                  
+  if (isabstkey(slot))  
     luaH_newkey(L, t, key, value);
-  else
+  else // slot 存在时直接覆盖, 两种情况 slot 会存在
+        // 1. slot 是数组成员, 即可视为数组的插入
+        // 2. slot 在hash部分中
     setobj2t(L, cast(TValue *, slot), value);
 }
 
@@ -820,11 +857,13 @@ void luaH_finishset (lua_State *L, Table *t, const TValue *key,
 ** barrier and invalidate the TM cache.
 */
 void luaH_set (lua_State *L, Table *t, const TValue *key, TValue *value) {
+  // 获得 key 对应的值, 有三种情况
+  // 1.
   const TValue *slot = luaH_get(t, key);
   luaH_finishset(L, t, key, slot, value);
 }
 
-
+// 
 void luaH_setint (lua_State *L, Table *t, lua_Integer key, TValue *value) {
   const TValue *p = luaH_getint(t, key);
   if (isabstkey(p)) {
@@ -832,7 +871,9 @@ void luaH_setint (lua_State *L, Table *t, lua_Integer key, TValue *value) {
     setivalue(&k, key);
     luaH_newkey(L, t, &k, value);
   }
-  else
+  else  // key存在, 覆盖, 这里存在有两种情况
+        // 1. key落在数组部分, 尽管数组部分get 出来的 TValue 是个空的, 也会从这里覆盖, 即视为插入数组
+        // 2. hash部分有
     setobj2t(L, cast(TValue *, p), value);
 }
 

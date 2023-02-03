@@ -10,8 +10,11 @@
 #include "lobject.h"
 
 
+//取node中i对应的值
 #define gnode(t,i)	(&(t)->node[i])
+//取value
 #define gval(n)		(&(n)->i_val)
+//取next
 #define gnext(n)	((n)->u.next)
 
 
@@ -24,6 +27,7 @@
 
 
 /* true when 't' is using 'dummynode' as its hash part */
+// hash表是否为空
 #define isdummy(t)		((t)->lastfree == NULL)
 
 

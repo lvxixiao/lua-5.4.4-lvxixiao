@@ -79,10 +79,10 @@ typedef struct TValue {
 
 /* type tag of a TValue (bits 0-3 for tags + variant bits 4-5) */
 #define withvariant(t)	((t) & 0x3F)
-#define ttypetag(o)	withvariant(rawtt(o))
+#define ttypetag(o)	withvariant(rawtt(o)) //获得数据的类型, 基础类型 + 扩展类型
 
 /* type of a TValue */
-#define ttype(o)	(novariant(rawtt(o)))
+#define ttype(o)	(novariant(rawtt(o))) //获得基础类型
 
 
 /* Macros to test type */
@@ -109,9 +109,10 @@ typedef struct TValue {
 /* Macros to set values */
 
 /* set a value's tag */
-#define settt_(o,t)	((o)->tt_=(t))
+#define settt_(o,t)	((o)->tt_=(t))//设置value的类型
 
 
+// 将obj2复制给obj1
 /* main macro to copy values (from 'obj2' to 'obj1') */
 #define setobj(L,obj1,obj2) \
 	{ TValue *io1=(obj1); const TValue *io2=(obj2); \
@@ -187,7 +188,7 @@ typedef StackValue *StkId;
 #define setnilvalue(obj) settt_(obj, LUA_VNIL)
 
 
-#define isabstkey(v)		checktag((v), LUA_VABSTKEY)
+#define isabstkey(v)		checktag((v), LUA_VABSTKEY) //检查key是否缺失, 存在key则返回 false
 
 
 /*
@@ -316,8 +317,8 @@ typedef struct GCObject {
 
 #define nvalue(o)	check_exp(ttisnumber(o), \
 	(ttisinteger(o) ? cast_num(ivalue(o)) : fltvalue(o)))
-#define fltvalue(o)	check_exp(ttisfloat(o), val_(o).n)
-#define ivalue(o)	check_exp(ttisinteger(o), val_(o).i)
+#define fltvalue(o)	check_exp(ttisfloat(o), val_(o).n)  //获得 float 值
+#define ivalue(o)	check_exp(ttisinteger(o), val_(o).i) //获得 int 值
 
 #define fltvalueraw(v)	((v).n)
 #define ivalueraw(v)	((v).i)
@@ -685,12 +686,12 @@ typedef union Closure {
 */
 typedef union Node {
   struct NodeKey {
-    TValuefields;  /* fields for value */
-    lu_byte key_tt;  /* key type */
-    int next;  /* for chaining */
-    Value key_val;  /* key value */
+    TValuefields;  /* fields for value */ // value 的具体数值
+    lu_byte key_tt;  /* key type */ // key 的类型
+    int next;  /* for chaining */ // hash 冲突时链接到的下一个位置
+    Value key_val;  /* key value */ // key 的具体数值
   } u;
-  TValue i_val;  /* direct access to node's value as a proper 'TValue' */
+  TValue i_val;  /* direct access to node's value as a proper 'TValue' */ // value 的具体数值,主要为了便捷访问
 } Node;
 
 
@@ -702,6 +703,7 @@ typedef union Node {
 
 
 /* copy a value from a key */
+// 将一个Node的key复制到TValue
 #define getnodekey(L,obj,node) \
 	{ TValue *io_=(obj); const Node *n_=(node); \
 	  io_->value_ = n_->u.key_val; io_->tt_ = n_->u.key_tt; \
@@ -714,7 +716,9 @@ typedef union Node {
 ** smallest power of two not smaller than 'alimit' (or zero iff 'alimit'
 ** is zero); 'alimit' is then used as a hint for #t.
 */
-
+/* alimit: if 'isrealsize(t)' is true, alimit 是 array 的真实 size。否则
+  array 的真实 size 是不小于 alimit 的 2的幂或0
+*/
 #define BITRAS		(1 << 7)
 #define isrealasize(t)		(!((t)->flags & BITRAS))
 #define setrealasize(t)		((t)->flags &= cast_byte(~BITRAS))
@@ -723,13 +727,13 @@ typedef union Node {
 
 typedef struct Table {
   CommonHeader;
-  lu_byte flags;  /* 1<<p means tagmethod(p) is not present */
-  lu_byte lsizenode;  /* log2 of size of 'node' array */
-  unsigned int alimit;  /* "limit" of 'array' array */
-  TValue *array;  /* array part */
-  Node *node;
-  Node *lastfree;  /* any free position is before this position */
-  struct Table *metatable;
+  lu_byte flags;  /* 1<<p means tagmethod(p) is not present */  //缓存该表实现了哪些元方法
+  lu_byte lsizenode;  /* log2 of size of 'node' array */  // 散列桶容量的对数(以2为底) 1 << sizenode 可以获得实际大小
+  unsigned int alimit;  /* "limit" of 'array' array */  //数组容量
+  TValue *array;  /* array part */  //数组首地址
+  Node *node; // 散列表首地址
+  Node *lastfree;  /* any free position is before this position */ // 散列表最后位置地址(是个哨兵)
+  struct Table *metatable;  
   GCObject *gclist;
 } Table;
 
@@ -746,7 +750,7 @@ typedef struct Table {
 #define keyisshrstr(node)	(keytt(node) == ctb(LUA_VSHRSTR))
 #define keystrval(node)		(gco2ts(keyval(node).gc))
 
-#define setnilkey(node)		(keytt(node) = LUA_TNIL)
+#define setnilkey(node)		(keytt(node) = LUA_TNIL)//设置key的类型为nil
 
 #define keyiscollectable(n)	(keytt(n) & BIT_ISCOLLECTABLE)
 
