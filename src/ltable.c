@@ -277,6 +277,7 @@ LUAI_FUNC unsigned int luaH_realasize (const Table *t) {
 ** (If it is not, 'alimit' cannot be changed to any other value
 ** without changing the real size.)
 */
+// 检查 alimit 是否为数组的实际大小或者2的幂.
 static int ispow2realasize (const Table *t) {
   return (!isrealasize(t) || ispow2(t->alimit));
 }
@@ -342,24 +343,24 @@ static unsigned int findindex (lua_State *L, Table *t, TValue *key,
     const TValue *n = getgeneric(t, key, 1);
     if (l_unlikely(isabstkey(n)))
       luaG_runerror(L, "invalid key to 'next'");  /* key not found */
-    i = cast_int(nodefromval(n) - gnode(t, 0));  /* key index in hash table */
+    i = cast_int(nodefromval(n) - gnode(t, 0));  /* key index in hash table */ //hash表中的键索引
     /* hash elements are numbered after array ones */
     return (i + 1) + asize;
   }
 }
 
-
+// todo: zf 还是看不太懂这个 luaH_next
 int luaH_next (lua_State *L, Table *t, StkId key) {
   unsigned int asize = luaH_realasize(t);
   unsigned int i = findindex(L, t, s2v(key), asize);  /* find original key */
-  for (; i < asize; i++) {  /* try first array part */
+  for (; i < asize; i++) {  /* try first array part */  //先找数组部分
     if (!isempty(&t->array[i])) {  /* a non-empty entry? */
       setivalue(s2v(key), i + 1);
       setobj2s(L, key + 1, &t->array[i]);
       return 1;
     }
   }
-  for (i -= asize; cast_int(i) < sizenode(t); i++) {  /* hash part */
+  for (i -= asize; cast_int(i) < sizenode(t); i++) {  /* hash part */ //数组找不到找hash部分
     if (!isempty(gval(gnode(t, i)))) {  /* a non-empty entry? */
       Node *n = gnode(t, i);
       getnodekey(L, s2v(key), n);
@@ -959,9 +960,20 @@ static unsigned int binsearch (const TValue *array, unsigned int i,
 ** (In those cases, the boundary is not inside the array part, and
 ** therefore cannot be used as a new limit.)
 */
+
+/*
+  试图寻找一个 boundary, 满足 t[boundary] != nil 而 t[boundary + 1] == nil, 对应#t操作
+  (1)如果数组最后一个元素t[limit] == nil, 检查 t[limit -1]是否存在, 如果存在 limit -1 就是 boundary, 否则进行二分查找。
+      这两种情况都会使用 boundary 作为 t->alimit 的值，以便在在下次调用时作为提示。
+  (2)如果t[limit] != nil 并且数组部分在 limit 之后还有更多的元素, 用二分查找寻找 boundary。 
+      之后如果t[limit + 1] == nil, 则 limit = boundary。否则检查数组部分的最后一个元素, 如果是空则
+      boundary 是旧的 limit 或者 二分查找找到的值中的一个。
+  (3)如果limit == 0 或者数组最后一个元素存在, 则必须在 hash 部分查找。如果 hash 部分不存在 limit+1 或者没有 hash 部分
+      则 limit = boundray, 否则调用 hash_search 查找。
+*/
 lua_Unsigned luaH_getn (Table *t) {
-  unsigned int limit = t->alimit;
-  if (limit > 0 && isempty(&t->array[limit - 1])) {  /* (1)? */
+  unsigned int limit = t->alimit; // limit 有可能是数组容量, 或者上次 #t 的值
+  if (limit > 0 && isempty(&t->array[limit - 1])) {  /* (1)? */ //对应情况1, t[limit - 1] 不存在
     /* there must be a boundary before 'limit' */
     if (limit >= 2 && !isempty(&t->array[limit - 2])) {
       /* 'limit - 1' is a boundary; can it be a new limit? */
@@ -971,7 +983,7 @@ lua_Unsigned luaH_getn (Table *t) {
       }
       return limit - 1;
     }
-    else {  /* must search for a boundary in [0, limit] */
+    else {  /* must search for a boundary in [0, limit] */  // limit == 0 or t[limit - 1] != nil
       unsigned int boundary = binsearch(t->array, 0, limit);
       /* can this boundary represent the real size of the array? */
       if (ispow2realasize(t) && boundary > luaH_realasize(t) / 2) {

@@ -729,7 +729,7 @@ typedef struct Table {
   CommonHeader;
   lu_byte flags;  /* 1<<p means tagmethod(p) is not present */  //缓存该表实现了哪些元方法
   lu_byte lsizenode;  /* log2 of size of 'node' array */  // 散列桶容量的对数(以2为底) 1 << sizenode 可以获得实际大小
-  unsigned int alimit;  /* "limit" of 'array' array */  //数组容量
+  unsigned int alimit;  /* "limit" of 'array' array */  //数组容量, 也有可能是 #t
   TValue *array;  /* array part */  //数组首地址
   Node *node; // 散列表首地址
   Node *lastfree;  /* any free position is before this position */ // 散列表最后位置地址(是个哨兵)
