@@ -176,7 +176,17 @@ LUA_API int lua_absindex (lua_State *L, int idx) {
 }
 
 
+// 获得栈顶索引(等于栈元素个数)
 LUA_API int lua_gettop (lua_State *L) {
+  /**
+   * L->top 
+   * argn
+   * ...
+   * arg1
+   * func
+   * 
+   * 栈如上所示, L->top-1 才是第一个元素的地址, 再减去 func 的地址就得到了元素个数
+  */
   return cast_int(L->top - (L->ci->func + 1));
 }
 
@@ -1061,7 +1071,7 @@ LUA_API int lua_pcallk (lua_State *L, int nargs, int nresults, int errfunc,
     api_check(L, ttisfunction(s2v(o)), "error handler must be a function");
     func = savestack(L, o);
   }
-  c.func = L->top - (nargs+1);  /* function to be called */
+  c.func = L->top - (nargs+1);  /* function to be called */ // +1 是因为 L->top 是栈顶, L->top - 1 开始才是参数在栈中的位置.
   if (k == NULL || !yieldable(L)) {  /* no continuation or no yieldable? */
     c.nresults = nresults;  /* do a 'conventional' protected call */
     status = luaD_pcall(L, f_call, &c, savestack(L, c.func), func);

@@ -148,7 +148,7 @@ typedef union StackValue {
   TValue val;
   struct {
     TValuefields;
-    unsigned short delta;
+    unsigned short delta; // 2
   } tbclist;
 } StackValue;
 

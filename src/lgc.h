@@ -24,6 +24,11 @@
 ** when the invariant is not being enforced (e.g., sweep phase).
 */
 
+/**
+ * 可收集对象只能会有三种颜色之一。白色意味着没有标记。灰色意味着已经标记, 但是他的引用可能未标记。
+ * 黑色意味着他的所有引用都已经呗标记。黑色对象永远不会指向一个白色对象。另外,任何灰色对象必须在 gray list, 以便在回收循环之后它能再次
+ * 被访问(open upvalues 在这个规则之外)。最后一句看不太懂, 不变量没有被强制执行时这些列表没有意义(例如 回收阶段)?
+*/
 
 /*
 ** Possible states of the Garbage Collector
@@ -99,7 +104,7 @@
 #define nw2black(x)  \
 	check_exp(!iswhite(x), l_setbit((x)->marked, BLACKBIT))
 
-#define luaC_white(g)	cast_byte((g)->currentwhite & WHITEBITS)
+#define luaC_white(g)	cast_byte((g)->currentwhite & WHITEBITS) // 获得当前白
 
 
 /* object age in generational mode */

@@ -256,6 +256,7 @@ void luaC_fix (lua_State *L, GCObject *o) {
 ** it to 'allgc' list.
 */
 GCObject *luaC_newobj (lua_State *L, int tt, size_t sz) {
+  // todo: zf 怎么知道哪些对象引用找不到的
   global_State *g = G(L);
   GCObject *o = cast(GCObject *, luaM_newobject(L, novariant(tt), sz));
   o->marked = luaC_white(g);
@@ -288,11 +289,18 @@ GCObject *luaC_newobj (lua_State *L, int tt, size_t sz) {
 ** for at most two levels: An upvalue cannot refer to another upvalue
 ** (only closures can), and a userdata's metatable must be a table.
 */
+/**
+ * 标记对象。 没有值的userdata, 字符串 和 闭包的upvalues会被直接涂黑。 
+ * closed upvalue 会被涂黑。 open upvalue 因为已经通过线程的 twups 间接链接到一起, 
+ * 因此不放入 gray list。然后他们保持灰色避免 barriers, 它们的值通过线程或者 remarkupvals 再次访问。
+ * 其他对象添加进 gray list 稍后被访问(并且涂黑)。 userdata 和 upvalues 可以递归调用这个方法但是最多只能两层。
+ * upvalue 不能引用其他 upvalue(只有闭包可以), userdata metatable 必须是一个 table。
+*/
 static void reallymarkobject (global_State *g, GCObject *o) {
   switch (o->tt) {
     case LUA_VSHRSTR:
     case LUA_VLNGSTR: {
-      set2black(o);  /* nothing to visit */
+      set2black(o);  /* nothing to visit */ 
       break;
     }
     case LUA_VUPVAL: {
@@ -395,11 +403,11 @@ static void cleargraylists (global_State *g) {
 ** mark root set and reset all gray lists, to start a new collection
 */
 static void restartcollection (global_State *g) {
-  cleargraylists(g);
-  markobject(g, g->mainthread);
-  markvalue(g, &g->l_registry);
-  markmt(g);
-  markbeingfnz(g);  /* mark any finalizing object left from previous cycle */
+  cleargraylists(g); // 重置灰色链表
+  markobject(g, g->mainthread); // 标记主线程
+  markvalue(g, &g->l_registry); // 标记全局注册表
+  markmt(g); // 标记全局元表
+  markbeingfnz(g);  /* mark any finalizing object left from previous cycle */ // todo: zf 不明白这里为什么要把上次循环准备回收的对象再标记一次
 }
 
 /* }====================================================== */
@@ -1581,7 +1589,7 @@ static lu_mem singlestep (lua_State *L) {
   lua_assert(!g->gcstopem);  /* collector is not reentrant */
   g->gcstopem = 1;  /* no emergency collections while collecting */
   switch (g->gcstate) {
-    case GCSpause: {
+    case GCSpause: { // 初始化阶段, 标记几个重要的节点。
       restartcollection(g);
       g->gcstate = GCSpropagate;
       work = 1;

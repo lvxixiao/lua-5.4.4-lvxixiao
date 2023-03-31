@@ -170,8 +170,8 @@ typedef struct stringtable {
 ** before the function starts or after it ends.
 */
 typedef struct CallInfo {
-  StkId func;  /* function index in the stack */
-  StkId	top;  /* top for this function */
+  StkId func;  /* function index in the stack */  //函数在栈中的位置
+  StkId	top;  /* top for this function */ //函数栈顶的位置
   struct CallInfo *previous, *next;  /* dynamic call link */
   union {
     struct {  /* only for Lua functions */
@@ -254,26 +254,26 @@ typedef struct global_State {
   lu_mem GCestimate;  /* an estimate of the non-garbage memory in use */
   lu_mem lastatomic;  /* see function 'genstep' in file 'lgc.c' */
   stringtable strt;  /* hash table for strings */
-  TValue l_registry;
+  TValue l_registry; // 注册表, 是一个table
   TValue nilvalue;  /* a nil value */
   unsigned int seed;  /* randomized seed for hashes */
-  lu_byte currentwhite;
-  lu_byte gcstate;  /* state of garbage collector */
+  lu_byte currentwhite; //当前白色, gc相关
+  lu_byte gcstate;  /* state of garbage collector */ // gc的状态, 暂停阶段、传播阶段、回收阶段等。
   lu_byte gckind;  /* kind of GC running */
   lu_byte gcstopem;  /* stops emergency collections */
   lu_byte genminormul;  /* control for minor generational collections */
   lu_byte genmajormul;  /* control for major generational collections */
   lu_byte gcstp;  /* control whether GC is running */
   lu_byte gcemergency;  /* true if this is an emergency collection */
-  lu_byte gcpause;  /* size of pause between successive GCs */
-  lu_byte gcstepmul;  /* GC "speed" */
+  lu_byte gcpause;  /* size of pause between successive GCs */ //用于控制下一轮gc开始得时机, 控制垃圾收集器在一次收集完成后等待多久再开始新的一次收集。
+  lu_byte gcstepmul;  /* GC "speed" */ //gc每步处理多少数据, 控制gc的回收速度.
   lu_byte gcstepsize;  /* (log2 of) GC granularity */
-  GCObject *allgc;  /* list of all collectable objects */
-  GCObject **sweepgc;  /* current position of sweep in list */
+  GCObject *allgc;  /* list of all collectable objects */ //存放所有gc对象
+  GCObject **sweepgc;  /* current position of sweep in list */ //最近一次回收的位置,下一次从这个位置开始回收.
   GCObject *finobj;  /* list of collectable objects with finalizers */
-  GCObject *gray;  /* list of gray objects */
-  GCObject *grayagain;  /* list of objects to be traversed atomically */
-  GCObject *weak;  /* list of tables with weak values */
+  GCObject *gray;  /* list of gray objects */ //存放灰色对象链表
+  GCObject *grayagain;  /* list of objects to be traversed atomically */ //存放需一次性扫描的灰色节点链表
+  GCObject *weak;  /* list of tables with weak values */ //存放弱值得链表
   GCObject *ephemeron;  /* list of ephemeron tables (weak keys) */
   GCObject *allweak;  /* list of all-weak tables */
   GCObject *tobefnz;  /* list of userdata to be GC */
@@ -291,7 +291,7 @@ typedef struct global_State {
   struct lua_State *mainthread;
   TString *memerrmsg;  /* message for memory-allocation errors */
   TString *tmname[TM_N];  /* array with tag-method names */
-  struct Table *mt[LUA_NUMTAGS];  /* metatables for basic types */
+  struct Table *mt[LUA_NUMTAGS];  /* metatables for basic types */ // 基础类型的元方法,一般是空值,table和userdata不会到这里查找元方法。
   TString *strcache[STRCACHE_N][STRCACHE_M];  /* cache for strings in API */
   lua_WarnFunction warnf;  /* warning function */
   void *ud_warn;         /* auxiliary data to 'warnf' */
