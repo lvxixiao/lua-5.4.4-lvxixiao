@@ -552,13 +552,13 @@ typedef struct Proto {
   int linedefined;  /* debug information  */
   int lastlinedefined;  /* debug information  */
   TValue *k;  /* constants used by the function */
-  Instruction *code;  /* opcodes */
+  Instruction *code;  /* opcodes */ //opcode 虚拟机指令
   struct Proto **p;  /* functions defined inside the function */
   Upvaldesc *upvalues;  /* upvalue information */
   ls_byte *lineinfo;  /* information about source lines (debug information) */
   AbsLineInfo *abslineinfo;  /* idem */
-  LocVar *locvars;  /* information about local variables (debug information) */
-  TString  *source;  /* used for debug information */
+  LocVar *locvars;  /* information about local variables (debug information) */ // local变量名称以及其调试信息, local变量的值在栈上
+  TString  *source;  /* used for debug information */ //记录脚本路劲
   GCObject *gclist;
 } Proto;
 
@@ -634,11 +634,11 @@ typedef struct UpVal {
 
 typedef struct CClosure {
   ClosureHeader;
-  lua_CFunction f;
+  lua_CFunction f;  // 这个闭包的 c 函数
   TValue upvalue[1];  /* list of upvalues */
 } CClosure;
 
-
+//lua函数闭包
 typedef struct LClosure {
   ClosureHeader;
   struct Proto *p;

@@ -281,6 +281,7 @@ LUA_API void lua_copy (lua_State *L, int fromidx, int toidx) {
 }
 
 
+//将栈中 idx 位置的对象复制一份到栈顶(浅拷贝)
 LUA_API void lua_pushvalue (lua_State *L, int idx) {
   lua_lock(L);
   setobj2s(L, L->top, index2value(L, idx));
@@ -590,6 +591,7 @@ LUA_API const char *lua_pushfstring (lua_State *L, const char *fmt, ...) {
 }
 
 
+// 将 c 函数压入栈, n 代表 upvalue 的数量
 LUA_API void lua_pushcclosure (lua_State *L, lua_CFunction fn, int n) {
   lua_lock(L);
   if (n == 0) {
@@ -602,7 +604,7 @@ LUA_API void lua_pushcclosure (lua_State *L, lua_CFunction fn, int n) {
     api_check(L, n <= MAXUPVAL, "upvalue index too large");
     cl = luaF_newCclosure(L, n);
     cl->f = fn;
-    L->top -= n;
+    L->top -= n;  //upvalue出栈
     while (n--) {
       setobj2n(L, &cl->upvalue[n], s2v(L->top + n));
       /* does not need barrier because closure is white */
@@ -649,7 +651,7 @@ LUA_API int lua_pushthread (lua_State *L) {
 ** get functions (Lua -> stack)
 */
 
-// 和 lua_gettable 差不多的逻辑
+// 将 t[k] 置于栈顶, 返回 t[k] 的类型
 l_sinline int auxgetstr (lua_State *L, const TValue *t, const char *k) {
   const TValue *slot;
   TString *str = luaS_new(L, k);
@@ -701,6 +703,7 @@ LUA_API int lua_gettable (lua_State *L, int idx) {
 }
 
 
+// 将 t[k] 置于栈顶, 返回 t[k] 的类型
 LUA_API int lua_getfield (lua_State *L, int idx, const char *k) {
   lua_lock(L);
   return auxgetstr(L, index2value(L, idx), k);
@@ -726,6 +729,7 @@ LUA_API int lua_geti (lua_State *L, int idx, lua_Integer n) {
 }
 
 
+//将val压入栈, 并返回类型
 l_sinline int finishrawget (lua_State *L, const TValue *val) {
   if (isempty(val))  /* avoid copying empty items to the stack */
     setnilvalue(s2v(L->top));
@@ -755,7 +759,7 @@ LUA_API int lua_rawget (lua_State *L, int idx) {
   return finishrawget(L, val);
 }
 
-
+//将 t[n] 压入栈, 并返回其类型, idx 是 t 在栈中的索引
 LUA_API int lua_rawgeti (lua_State *L, int idx, lua_Integer n) {
   Table *t;
   lua_lock(L);
@@ -883,6 +887,7 @@ LUA_API void lua_settable (lua_State *L, int idx) {
 }
 
 
+//t[k] = value, value = 栈顶的值, idx 是 table 在栈中的位置
 LUA_API void lua_setfield (lua_State *L, int idx, const char *k) {
   lua_lock(L);  /* unlock done in 'auxsetstr' */
   auxsetstr(L, index2value(L, idx), k);

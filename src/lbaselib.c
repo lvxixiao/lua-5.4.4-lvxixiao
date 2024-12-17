@@ -537,6 +537,7 @@ static const luaL_Reg base_funcs[] = {
 LUAMOD_API int luaopen_base (lua_State *L) {
   /* open lib into global table */
   lua_pushglobaltable(L);
+  // base_funcs 的函数设置到 global table 中, 因为没有upvalue, 所以value类型是 light c function
   luaL_setfuncs(L, base_funcs, 0);
   /* set global _G */
   lua_pushvalue(L, -1);
