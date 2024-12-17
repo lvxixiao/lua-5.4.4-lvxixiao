@@ -41,6 +41,7 @@ typedef struct LX {
 /*
 ** Main thread combines a thread state and the global state
 */
+// 据说是把 lua_State 和 global_State 分配再一起可以尽可能避免内存碎片，同时减少内存分配和释放次数。
 typedef struct LG {
   LX l;
   global_State g;

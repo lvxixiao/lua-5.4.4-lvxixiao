@@ -288,7 +288,7 @@ void luaV_finishget (lua_State *L, const TValue *t, TValue *key, StkId val,
                       const TValue *slot) {
   int loop;  /* counter to avoid infinite loops */
   const TValue *tm;  /* metamethod */
-  for (loop = 0; loop < MAXTAGLOOP; loop++) {
+  for (loop = 0; loop < MAXTAGLOOP; loop++) { 
     if (slot == NULL) {  /* 't' is not a table? */
       lua_assert(!ttistable(t));
       tm = luaT_gettmbyobj(L, t, TM_INDEX);
@@ -351,10 +351,10 @@ void luaV_finishset (lua_State *L, const TValue *t, TValue *key,
     }
     /* try the metamethod */
     if (ttisfunction(tm)) {
-      luaT_callTM(L, tm, t, key, val);
+      luaT_callTM(L, tm, t, key, val); // 调用元方法 newindex
       return;
     }
-    t = tm;  /* else repeat assignment over 'tm' */
+    t = tm;  /* else repeat assignment over 'tm' */ // 元方法是个表, 继续从这个表里查找
     if (luaV_fastget(L, t, key, slot, luaH_get)) {
       luaV_finishfastset(L, t, slot, val);
       return;  /* done */

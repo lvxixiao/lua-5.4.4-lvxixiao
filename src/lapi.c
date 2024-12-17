@@ -649,18 +649,18 @@ LUA_API int lua_pushthread (lua_State *L) {
 ** get functions (Lua -> stack)
 */
 
-
+// 和 lua_gettable 差不多的逻辑
 l_sinline int auxgetstr (lua_State *L, const TValue *t, const char *k) {
   const TValue *slot;
   TString *str = luaS_new(L, k);
-  if (luaV_fastget(L, t, str, slot, luaH_getstr)) {
+  if (luaV_fastget(L, t, str, slot, luaH_getstr)) { // 从 table 中查找
     setobj2s(L, L->top, slot);
     api_incr_top(L);
   }
   else {
     setsvalue2s(L, L->top, str);
     api_incr_top(L);
-    luaV_finishget(L, t, s2v(L->top - 1), L->top - 1, slot);
+    luaV_finishget(L, t, s2v(L->top - 1), L->top - 1, slot); // 从元表中查找
   }
   lua_unlock(L);
   return ttype(s2v(L->top - 1));
@@ -685,16 +685,17 @@ LUA_API int lua_getglobal (lua_State *L, const char *name) {
 }
 
 
+// 将 t[k] 置于栈顶, 返回 t[k] 的类型
 LUA_API int lua_gettable (lua_State *L, int idx) {
-  const TValue *slot;
+  const TValue *slot; //t[k]
   TValue *t;
   lua_lock(L);
-  t = index2value(L, idx);
-  if (luaV_fastget(L, t, s2v(L->top - 1), slot, luaH_get)) {
+  t = index2value(L, idx);  // 获得 table
+  if (luaV_fastget(L, t, s2v(L->top - 1), slot, luaH_get)) { // 通过 luaH_get 获取
     setobj2s(L, L->top - 1, slot);
   }
   else
-    luaV_finishget(L, t, s2v(L->top - 1), L->top - 1, slot);
+    luaV_finishget(L, t, s2v(L->top - 1), L->top - 1, slot); // 尝试从元方法找
   lua_unlock(L);
   return ttype(s2v(L->top - 1));
 }
@@ -872,11 +873,11 @@ LUA_API void lua_settable (lua_State *L, int idx) {
   lua_lock(L);
   api_checknelems(L, 2);
   t = index2value(L, idx);
-  if (luaV_fastget(L, t, s2v(L->top - 2), slot, luaH_get)) {
-    luaV_finishfastset(L, t, slot, s2v(L->top - 1));
+  if (luaV_fastget(L, t, s2v(L->top - 2), slot, luaH_get)) { // 值存在, 覆盖掉
+    luaV_finishfastset(L, t, slot, s2v(L->top - 1)); // 往 slot 里设置值, 并且 gc 往后走一步
   }
   else
-    luaV_finishset(L, t, s2v(L->top - 2), s2v(L->top - 1), slot);
+    luaV_finishset(L, t, s2v(L->top - 2), s2v(L->top - 1), slot); // 设置值, 会触发元方法
   L->top -= 2;  /* pop index and value */
   lua_unlock(L);
 }

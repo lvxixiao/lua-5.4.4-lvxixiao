@@ -256,7 +256,6 @@ void luaC_fix (lua_State *L, GCObject *o) {
 ** it to 'allgc' list.
 */
 GCObject *luaC_newobj (lua_State *L, int tt, size_t sz) {
-  // todo: zf 怎么知道哪些对象引用找不到的
   global_State *g = G(L);
   GCObject *o = cast(GCObject *, luaM_newobject(L, novariant(tt), sz));
   o->marked = luaC_white(g);
@@ -626,18 +625,26 @@ static int traverseLclosure (global_State *g, LClosure *cl) {
 ** (which can only happen in generational mode) or if the traverse is in
 ** the propagate phase (which can only happen in incremental mode).
 */
+/**
+ * 
+ * 标记栈的元素, 并在最终阶段清除并重置栈。这确保整个栈都是有效的对象。
+ * 线程没有barriers。
+ * 分代gc模式下, 旧线程必须在整个gc循环被访问,因为他们可能指向新对象。
+ * 增量gc模式下，线程可以在gc结束之前被修改,因为他们必须在 atomic 阶段再次被访问。
+ * 为了确保这些访问,分代gc模式下如果是新线程必须回到 gray list。或在增量模式的传播阶段遍历。
+*/
 static int traversethread (global_State *g, lua_State *th) {
   UpVal *uv;
   StkId o = th->stack;
-  if (isold(th) || g->gcstate == GCSpropagate)
+  if (isold(th) || g->gcstate == GCSpropagate) // 分代gc
     linkgclist(th, g->grayagain);  /* insert into 'grayagain' list */
   if (o == NULL)
     return 1;  /* stack not completely built yet */
   lua_assert(g->gcstate == GCSatomic ||
              th->openupval == NULL || isintwups(th));
-  for (; o < th->top; o++)  /* mark live elements in the stack */
+  for (; o < th->top; o++)  /* mark live elements in the stack */ // 标记栈上的元素
     markvalue(g, s2v(o));
-  for (uv = th->openupval; uv != NULL; uv = uv->u.open.next)
+  for (uv = th->openupval; uv != NULL; uv = uv->u.open.next) // 标记 openupvalue
     markobject(g, uv);  /* open upvalues cannot be collected */
   if (g->gcstate == GCSatomic) {  /* final traversal? */
     for (; o < th->stack_last + EXTRA_STACK; o++)
@@ -649,7 +656,7 @@ static int traversethread (global_State *g, lua_State *th) {
     }
   }
   else if (!g->gcemergency)
-    luaD_shrinkstack(th); /* do not change stack in emergency cycle */
+    luaD_shrinkstack(th); /* do not change stack in emergency cycle */ // 收缩栈
   return 1 + stacksize(th);
 }
 
@@ -659,8 +666,8 @@ static int traversethread (global_State *g, lua_State *th) {
 */
 static lu_mem propagatemark (global_State *g) {
   GCObject *o = g->gray;
-  nw2black(o);
-  g->gray = *getgclist(o);  /* remove from 'gray' list */
+  nw2black(o); // 涂黑
+  g->gray = *getgclist(o);  /* remove from 'gray' list */ // pop
   switch (o->tt) {
     case LUA_VTABLE: return traversetable(g, gco2t(o));
     case LUA_VUSERDATA: return traverseudata(g, gco2u(o));
