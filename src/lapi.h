@@ -22,6 +22,7 @@
 ** stack space to accommodate all results. In this case, this macro
 ** increases its stack space ('L->ci->top').
 */
+//当无法确定返回值数量时, 函数调用者的栈顶可能无法容纳返回值, 所以需要扩展 L->ci->top = L->top
 #define adjustresults(L,nres) \
     { if ((nres) <= LUA_MULTRET && L->ci->top < L->top) L->ci->top = L->top; }
 

@@ -234,7 +234,7 @@ int luaT_callorderiTM (lua_State *L, const TValue *p1, int v2,
   return luaT_callorderTM(L, p1, p2, event);
 }
 
-
+//根据可变参数数量, 调整函数在栈中的位置以及其栈顶
 void luaT_adjustvarargs (lua_State *L, int nfixparams, CallInfo *ci,
                          const Proto *p) {
   int i;

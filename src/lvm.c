@@ -1135,22 +1135,23 @@ void luaV_finishOp (lua_State *L) {
 #define vmcase(l)	case l:
 #define vmbreak		break
 
-
+//执行lua函数
 void luaV_execute (lua_State *L, CallInfo *ci) {
   LClosure *cl;
   TValue *k;
   StkId base;
   const Instruction *pc;
   int trap;
-#if LUA_USE_JUMPTABLE
-#include "ljumptab.h"
-#endif
- startfunc:
+// #if LUA_USE_JUMPTABLE
+// #include "ljumptab.h"
+// #endif
+ startfunc: //跳到这里说明要执行一个新的 lua 函数
   trap = L->hookmask;
  returning:  /* trap already set */
   cl = clLvalue(s2v(ci->func));
-  k = cl->p->k;
-  pc = ci->u.l.savedpc;
+  k = cl->p->k; //常量表
+  printf("常量表数量 %d\n", cl->p->sizek);
+  pc = ci->u.l.savedpc; //当前执行的指令
   if (l_unlikely(trap)) {
     if (pc == cl->p->code) {  /* first instruction (not resuming)? */
       if (cl->p->is_vararg)
@@ -1164,7 +1165,8 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
   /* main loop of interpreter */
   for (;;) {
     Instruction i;  /* instruction being executed */
-    StkId ra;  /* instruction's A register */
+    // base 是第一个参数的地址, ra 等寄存器的值, 根据 opcode 推算出偏移后获得
+    StkId ra;  /* instruction's A register */ //这他妈是个指针, 实际类型是 StackValue *
     vmfetch();
     #if 0
       /* low-level line tracing for debugging Lua */
@@ -1174,6 +1176,8 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
     lua_assert(base <= L->top && L->top < L->stack_last);
     /* invalidate top for instructions not expecting it */
     lua_assert(isIT(i) || (cast_void(L->top = base), 1));
+    // print("hello world") opcode 顺序 OP_VARARGPREP, OP_GETTABUP, OP_LOADK, OP_CALL, OP_RETURN
+    printf("luaV_execute i=%d GETARG_A(i)=%d, code = %d %d \n", i, GETARG_A(i), GET_OPCODE(i), OP_RETURN);
     vmdispatch (GET_OPCODE(i)) {
       vmcase(OP_MOVE) {
         setobjs2s(L, ra, RB(i));
@@ -1182,15 +1186,19 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
       vmcase(OP_LOADI) {
         lua_Integer b = GETARG_sBx(i);
         setivalue(s2v(ra), b);
+        printf("OP_LOADI b:%lld ra_val:%lld rd_p:%p\n", b, ivalue(s2v(ra)), ra);
         vmbreak;
       }
       vmcase(OP_LOADF) {
         int b = GETARG_sBx(i);
+        printf("OP_LOADF b:%d\n", b);
         setfltvalue(s2v(ra), cast_num(b));
         vmbreak;
       }
       vmcase(OP_LOADK) {
         TValue *rb = k + GETARG_Bx(i);
+        // printf("OP_LOADK 从常量表获取数据 %s, bx:%d\n", getstr(tsvalue(rb)), GETARG_Bx(i));
+        printf("OP_LOADK 从常量表获取数据 a:%d, bx:%d\n", GETARG_A(i), GETARG_Bx(i));
         setobj2s(L, ra, rb);
         vmbreak;
       }
@@ -1236,6 +1244,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         TValue *upval = cl->upvals[GETARG_B(i)]->v;
         TValue *rc = KC(i);
         TString *key = tsvalue(rc);  /* key must be a string */
+        printf("从 upvalue中的 table获取值 OP_GETTABUP index a=%d b=%d c=%d %s\n", GETARG_A(i), GETARG_B(i), GETARG_C(i), getstr(tsvalue(rc)));
         if (luaV_fastget(L, upval, key, slot, luaH_getshortstr)) {
           setobj2s(L, ra, slot);
         }
@@ -1629,6 +1638,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         CallInfo *newci;
         int b = GETARG_B(i);
         int nresults = GETARG_C(i) - 1;
+        printf("OP_CALL a:%d, b:%d, nresults:%d\n", GETARG_A(i), b, nresults);
         if (b != 0)  /* fixed number of arguments? */
           L->top = ra + b;  /* top signals number of arguments */
         /* else previous instruction set top */
@@ -1636,6 +1646,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         if ((newci = luaD_precall(L, ra, nresults)) == NULL)
           updatetrap(ci);  /* C call; nothing else to be done */
         else {  /* Lua call: run function in this same C frame */
+          printf("OP_CALL 开始调用lua函数\n");
           ci = newci;
           goto startfunc;
         }
@@ -1821,6 +1832,8 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         vmbreak;
       }
       vmcase(OP_VARARGPREP) {
+        //先 oncall, 再 OP_VARARGPREP
+        printf("OP_VARARGPREP ra:%d\n", GETARG_A(i));
         ProtectNT(luaT_adjustvarargs(L, GETARG_A(i), ci, cl->p));
         if (l_unlikely(trap)) {  /* previous "Protect" updated trap */
           luaD_hookcall(L, ci);

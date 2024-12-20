@@ -1048,7 +1048,7 @@ LUA_API void lua_callk (lua_State *L, int nargs, int nresults,
 */
 struct CallS {  /* data to 'f_call' */
   StkId func;
-  int nresults;
+  int nresults; //调用时传入的参数, 预期有多少返回值
 };
 
 
@@ -1069,6 +1069,7 @@ LUA_API int lua_pcallk (lua_State *L, int nargs, int nresults, int errfunc,
     "cannot use continuations inside hooks");
   api_checknelems(L, nargs+1);
   api_check(L, L->status == LUA_OK, "cannot do calls on non-normal thread");
+  //检查栈是否足够放下返回值
   checkresults(L, nargs, nresults);
   if (errfunc == 0)
     func = 0;
@@ -1097,12 +1098,14 @@ LUA_API int lua_pcallk (lua_State *L, int nargs, int nresults, int errfunc,
     L->errfunc = ci->u.c.old_errfunc;
     status = LUA_OK;  /* if it is here, there were no errors */
   }
+  //调用者的函数栈不足以容纳返回值时拓阔他
   adjustresults(L, nresults);
   lua_unlock(L);
   return status;
 }
 
 
+// reader 是读取文件的函数, 返回 buff 指针
 LUA_API int lua_load (lua_State *L, lua_Reader reader, void *data,
                       const char *chunkname, const char *mode) {
   ZIO z;

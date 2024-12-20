@@ -558,7 +558,7 @@ typedef struct Proto {
   ls_byte *lineinfo;  /* information about source lines (debug information) */
   AbsLineInfo *abslineinfo;  /* idem */
   LocVar *locvars;  /* information about local variables (debug information) */ // local变量名称以及其调试信息, local变量的值在栈上
-  TString  *source;  /* used for debug information */ //记录脚本路劲
+  TString  *source;  /* used for debug information */ //记录脚本路径
   GCObject *gclist;
 } Proto;
 

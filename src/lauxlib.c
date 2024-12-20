@@ -773,6 +773,7 @@ static int skipcomment (LoadF *lf, int *cp) {
 }
 
 
+//将文件加载成 chunk, chunk 是一段能被lua解释器运行的代码
 LUALIB_API int luaL_loadfilex (lua_State *L, const char *filename,
                                              const char *mode) {
   LoadF lf;

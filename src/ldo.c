@@ -13,6 +13,7 @@
 #include <setjmp.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "lua.h"
 
@@ -87,7 +88,7 @@ struct lua_longjmp {
   volatile int status;  /* error code */
 };
 
-
+//错误信息压入栈
 void luaD_seterrorobj (lua_State *L, int errcode, StkId oldtop) {
   switch (errcode) {
     case LUA_ERRMEM: {  /* memory error? */
@@ -111,13 +112,15 @@ void luaD_seterrorobj (lua_State *L, int errcode, StkId oldtop) {
   L->top = oldtop + 1;
 }
 
-
+//异常处理函数, 当有设置跳转时跳转到节点
 l_noret luaD_throw (lua_State *L, int errcode) {
   if (L->errorJmp) {  /* thread has an error handler? */
+    printf("有异常处理\n");
     L->errorJmp->status = errcode;  /* set status */
     LUAI_THROW(L, L->errorJmp);  /* jump to it */
   }
   else {  /* thread has no error handler */
+    printf("没有异常处理, 默认流程\n");
     global_State *g = G(L);
     errcode = luaE_resetthread(L, errcode);  /* close all upvalues */
     if (g->mainthread->errorJmp) {  /* main thread has a handler? */
@@ -129,6 +132,7 @@ l_noret luaD_throw (lua_State *L, int errcode) {
         lua_unlock(L);
         g->panic(L);  /* call panic function (last chance to jump out) */
       }
+      //终止进程
       abort();
     }
   }
@@ -141,6 +145,7 @@ int luaD_rawrunprotected (lua_State *L, Pfunc f, void *ud) {
   lj.status = LUA_OK;
   lj.previous = L->errorJmp;  /* chain new error handler */
   L->errorJmp = &lj;
+  //设置了一个 jmp lj->b, 然后执行 f
   LUAI_TRY(L, &lj,
     (*f)(L, ud);
   );
@@ -271,6 +276,7 @@ static int stackinuse (lua_State *L) {
 ** stacksize (equal to ERRORSTACKSIZE in this case), and so the stack
 ** will be reduced to a "regular" size.
 */
+//栈过大时调整栈的大小
 void luaD_shrinkstack (lua_State *L) {
   int inuse = stackinuse(L);
   int nsize = inuse * 2;  /* proposed new size */
@@ -387,6 +393,7 @@ static void rethook (lua_State *L, CallInfo *ci, int nres) {
 ** stack, below original 'func', so that 'luaD_precall' can call it. Raise
 ** an error if there is no '__call' metafield.
 */
+//尝试获取 __call 元方法定义的函数
 StkId luaD_tryfuncTM (lua_State *L, StkId func) {
   const TValue *tm;
   StkId p;
@@ -408,6 +415,7 @@ StkId luaD_tryfuncTM (lua_State *L, StkId func) {
 ** expressions, multiple results for tail calls/single parameters)
 ** separated.
 */
+//弹出函数参数, 将返回结果压入栈, 如果返回结果数量小于预期数量, 则用 nil 补充
 l_sinline void moveresults (lua_State *L, StkId res, int nres, int wanted) {
   StkId firstresult;
   int i;
@@ -459,6 +467,7 @@ l_sinline void moveresults (lua_State *L, StkId res, int nres, int wanted) {
 ** info. If function has to close variables, hook must be called after
 ** that.
 */
+//返回值压入栈, L->ci 指向上一个函数
 void luaD_poscall (lua_State *L, CallInfo *ci, int nres) {
   int wanted = ci->nresults;
   if (l_unlikely(L->hookmask && !hastocloseCfunc(wanted)))
@@ -475,7 +484,7 @@ void luaD_poscall (lua_State *L, CallInfo *ci, int nres) {
 
 #define next_ci(L)  (L->ci->next ? L->ci->next : luaE_extendCI(L))
 
-
+//创建一个新的 CallInfo, 并将其设置到 L->ci, 放入调用链表的末尾
 l_sinline CallInfo *prepCallInfo (lua_State *L, StkId func, int nret,
                                                 int mask, StkId top) {
   CallInfo *ci = L->ci = next_ci(L);  /* new frame */
@@ -490,11 +499,20 @@ l_sinline CallInfo *prepCallInfo (lua_State *L, StkId func, int nret,
 /*
 ** precall for C functions
 */
+// 调用c函数, 将返回值压入栈
 l_sinline int precallC (lua_State *L, StkId func, int nresults,
                                             lua_CFunction f) {
+
+  if (ttypetag(s2v(func)) == LUA_VLCF) {
+    printf("调用 light c 函数\n");
+  } else {
+    printf("调用 c closure 函数\n");
+  }
+  // printf("调用 c 函数\n", s2v(func))
   int n;  /* number of returns */
   CallInfo *ci;
   checkstackGCp(L, LUA_MINSTACK, func);  /* ensure minimum stack size */
+  // L->ci = ci, 当前要执行函数所在栈上的数据结构
   L->ci = ci = prepCallInfo(L, func, nresults, CIST_C,
                                L->top + LUA_MINSTACK);
   lua_assert(ci->top <= L->stack_last);
@@ -503,9 +521,11 @@ l_sinline int precallC (lua_State *L, StkId func, int nresults,
     luaD_hook(L, LUA_HOOKCALL, -1, 1, narg);
   }
   lua_unlock(L);
+  // 真正调用函数
   n = (*f)(L);  /* do the actual call */
   lua_lock(L);
   api_checknelems(L, n);
+  //返回值压入栈, L->ci 指向上一个函数
   luaD_poscall(L, ci, n);
   return n;
 }
@@ -562,6 +582,7 @@ int luaD_pretailcall (lua_State *L, CallInfo *ci, StkId func,
 ** returns NULL, with all the results on the stack, starting at the
 ** original function position.
 */
+//准备调用函数, 对于 lua 函数, 返回 CallInfo, 对于 c 函数, 直接调用返回 nil
 CallInfo *luaD_precall (lua_State *L, StkId func, int nresults) {
  retry:
   switch (ttypetag(s2v(func))) {
@@ -580,12 +601,14 @@ CallInfo *luaD_precall (lua_State *L, StkId func, int nresults) {
       checkstackGCp(L, fsize, func);
       L->ci = ci = prepCallInfo(L, func, nresults, 0, func + 1 + fsize);
       ci->u.l.savedpc = p->code;  /* starting point */
+      //缺的参数用 nil 填补
       for (; narg < nfixparams; narg++)
         setnilvalue(s2v(L->top++));  /* complete missing arguments */
       lua_assert(ci->top <= L->stack_last);
       return ci;
     }
     default: {  /* not a function */
+      printf("找不到函数, 试着从元方法里找\n");
       func = luaD_tryfuncTM(L, func);  /* try to get '__call' metamethod */
       /* return luaD_precall(L, func, nresults); */
       goto retry;  /* try again with metamethod */
@@ -606,7 +629,9 @@ l_sinline void ccall (lua_State *L, StkId func, int nResults, int inc) {
     luaE_checkcstack(L);
   if ((ci = luaD_precall(L, func, nResults)) != NULL) {  /* Lua function? */
     ci->callstatus = CIST_FRESH;  /* mark that it is a "fresh" execute */
+    printf("lua调用开始\n");
     luaV_execute(L, ci);  /* call it */
+    printf("lua调用结束\n");
   }
   L->nCcalls -= inc;
 }

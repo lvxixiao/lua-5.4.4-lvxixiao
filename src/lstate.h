@@ -175,7 +175,7 @@ typedef struct CallInfo {
   struct CallInfo *previous, *next;  /* dynamic call link */
   union {
     struct {  /* only for Lua functions */
-      const Instruction *savedpc;
+      const Instruction *savedpc; //pc指针, 当前的指令
       volatile l_signalT trap;
       int nextraargs;  /* # of extra arguments in vararg functions */
     } l;
@@ -194,8 +194,8 @@ typedef struct CallInfo {
       unsigned short ntransfer;  /* number of values transferred */
     } transferinfo;
   } u2;
-  short nresults;  /* expected number of results from this function */
-  unsigned short callstatus;
+  short nresults;  /* expected number of results from this function */  //期望的返回值数量, 在调用lua_pcall时传入
+  unsigned short callstatus;  //函数的调用状态
 } CallInfo;
 
 
@@ -319,7 +319,7 @@ struct lua_State {
   CallInfo base_ci;  /* CallInfo for first level (C calling Lua) */
   volatile lua_Hook hook;
   ptrdiff_t errfunc;  /* current error handling function (stack index) */
-  l_uint32 nCcalls;  /* number of nested (non-yieldable | C)  calls */
+  l_uint32 nCcalls;  /* number of nested (non-yieldable | C)  calls */ // 前16位表示 c 调用栈嵌套数, 调用的 c 函数嵌套不能超过 LUAI_MAXCCALLS
   int oldpc;  /* last pc traced */
   int basehookcount;
   int hookcount;
