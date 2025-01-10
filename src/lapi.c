@@ -13,6 +13,7 @@
 #include <limits.h>
 #include <stdarg.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "lua.h"
 
@@ -1035,8 +1036,10 @@ LUA_API void lua_callk (lua_State *L, int nargs, int nresults,
     L->ci->u.c.ctx = ctx;  /* save context */
     luaD_call(L, func, nresults);  /* do the call */
   }
-  else  /* no continuation or no yieldable */
+  else { /* no continuation or no yieldable */
+    //一旦调用栈有不可挂起的函数调用,那么接下来都不可以挂起了
     luaD_callnoyield(L, func, nresults);  /* just do the call */
+  }
   adjustresults(L, nresults);
   lua_unlock(L);
 }
@@ -1078,6 +1081,7 @@ LUA_API int lua_pcallk (lua_State *L, int nargs, int nresults, int errfunc,
     api_check(L, ttisfunction(s2v(o)), "error handler must be a function");
     func = savestack(L, o);
   }
+  printf("lua_pcallk 是否保护模式执行 %d\n", k == NULL || !yieldable(L));
   c.func = L->top - (nargs+1);  /* function to be called */ // +1 是因为 L->top 是栈顶, L->top - 1 开始才是参数在栈中的位置.
   if (k == NULL || !yieldable(L)) {  /* no continuation or no yieldable? */
     c.nresults = nresults;  /* do a 'conventional' protected call */

@@ -229,6 +229,7 @@ static void init_registry (lua_State *L, global_State *g) {
 /*
 ** open parts of the state that may cause memory-allocation errors.
 */
+//初始化栈、注册表、字符串池, 设置某些字符串不需要gc
 static void f_luaopen (lua_State *L, void *ud) {
   global_State *g = G(L);
   UNUSED(ud);
@@ -352,11 +353,12 @@ LUA_API int lua_resetthread (lua_State *L) {
   return status;
 }
 
-
+//初始化LG结构, 其包含 global_State 和 主线程 lua_State, 设置内存分配函数和gc
 LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
   int i;
   lua_State *L;
   global_State *g;
+  //为LG结构分配内存
   LG *l = cast(LG *, (*f)(ud, NULL, LUA_TTHREAD, sizeof(LG)));
   if (l == NULL) return NULL;
   L = &l->l.l;
@@ -365,6 +367,7 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
   g->currentwhite = bitmask(WHITE0BIT);
   L->marked = luaC_white(g);
   preinit_thread(L, g);
+  //主线程 L 链接到 gc 链表
   g->allgc = obj2gco(L);  /* by now, only object is the main thread */
   L->next = NULL;
   incnny(L);  /* main thread is always non yieldable */

@@ -59,5 +59,6 @@ LUAI_FUNC const char *luaG_addinfo (lua_State *L, const char *msg,
 LUAI_FUNC l_noret luaG_errormsg (lua_State *L);
 LUAI_FUNC int luaG_traceexec (lua_State *L, const Instruction *pc);
 
+const char *getfuncname (lua_State *L, CallInfo *ci, const char **name);
 
 #endif

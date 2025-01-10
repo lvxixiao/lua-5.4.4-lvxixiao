@@ -112,15 +112,15 @@ void luaD_seterrorobj (lua_State *L, int errcode, StkId oldtop) {
   L->top = oldtop + 1;
 }
 
-//异常处理函数, 当有设置跳转时跳转到节点
+//异常处理函数, 当有设置跳转时跳转到最近的设置节点
 l_noret luaD_throw (lua_State *L, int errcode) {
   if (L->errorJmp) {  /* thread has an error handler? */
-    printf("有异常处理\n");
+    printf("luaD_throw 有异常处理, 也有可能是调用了 yield, errCode %d\n", errcode);
     L->errorJmp->status = errcode;  /* set status */
     LUAI_THROW(L, L->errorJmp);  /* jump to it */
   }
   else {  /* thread has no error handler */
-    printf("没有异常处理, 默认流程\n");
+    printf("luaD_throw 没有异常处理, 默认流程\n");
     global_State *g = G(L);
     errcode = luaE_resetthread(L, errcode);  /* close all upvalues */
     if (g->mainthread->errorJmp) {  /* main thread has a handler? */
@@ -139,16 +139,19 @@ l_noret luaD_throw (lua_State *L, int errcode) {
 }
 
 
+// 保护模式调用函数 f
 int luaD_rawrunprotected (lua_State *L, Pfunc f, void *ud) {
+  printf("luaD_rawrunprotected 保护模式执行\n");
   l_uint32 oldnCcalls = L->nCcalls;
   struct lua_longjmp lj;
   lj.status = LUA_OK;
   lj.previous = L->errorJmp;  /* chain new error handler */
   L->errorJmp = &lj;
-  //设置了一个 jmp lj->b, 然后执行 f
+  //设置了一个 jmp lj->b, 串在 errorJmp 链上, 执行 f 后弹出
   LUAI_TRY(L, &lj,
     (*f)(L, ud);
   );
+  printf("luaD_rawrunprotected 保护模式执行结束\n");
   L->errorJmp = lj.previous;  /* restore old error handler */
   L->nCcalls = oldnCcalls;
   return lj.status;
@@ -504,11 +507,11 @@ l_sinline int precallC (lua_State *L, StkId func, int nresults,
                                             lua_CFunction f) {
 
   if (ttypetag(s2v(func)) == LUA_VLCF) {
-    printf("调用 light c 函数\n");
+    printf("precallC 调用 light c 函数, 能否挂起 %d\n", lua_isyieldable(L));
   } else {
-    printf("调用 c closure 函数\n");
+    printf("precallC 调用 c closure 函数, 能否挂起 %d\n", lua_isyieldable(L));
   }
-  // printf("调用 c 函数\n", s2v(func))
+
   int n;  /* number of returns */
   CallInfo *ci;
   checkstackGCp(L, LUA_MINSTACK, func);  /* ensure minimum stack size */
@@ -623,15 +626,21 @@ CallInfo *luaD_precall (lua_State *L, StkId func, int nresults) {
 ** plus increment number of non-yieldable calls).
 */
 l_sinline void ccall (lua_State *L, StkId func, int nResults, int inc) {
+  if (inc > 10) {
+    printf("ccall 本次调用不可挂起");
+  }
   CallInfo *ci;
   L->nCcalls += inc;
   if (l_unlikely(getCcalls(L) >= LUAI_MAXCCALLS))
     luaE_checkcstack(L);
   if ((ci = luaD_precall(L, func, nResults)) != NULL) {  /* Lua function? */
     ci->callstatus = CIST_FRESH;  /* mark that it is a "fresh" execute */
-    printf("lua调用开始\n");
+    const char *fname;
+    getfuncname(L, ci, &fname);
+    if (fname == NULL) fname = "";
+    printf("ccall lua调用开始 %s 能否挂起 %d\n", fname, lua_isyieldable(L));
     luaV_execute(L, ci);  /* call it */
-    printf("lua调用结束\n");
+    printf("ccall lua调用结束 %s 能否挂起 %d\n", fname, lua_isyieldable(L));
   }
   L->nCcalls -= inc;
 }
@@ -647,6 +656,12 @@ void luaD_call (lua_State *L, StkId func, int nResults) {
 
 /*
 ** Similar to 'luaD_call', but does not allow yields during the call.
+*/
+/**
+ * 执行函数,但是不允许被执行函数挂起
+ * 不允许的情况
+ * 1.错误函数中挂起
+ * 2.调用gc元方法时
 */
 void luaD_callnoyield (lua_State *L, StkId func, int nResults) {
   ccall(L, func, nResults, nyci);
@@ -784,16 +799,20 @@ static void resume (lua_State *L, void *ud) {
   int n = *(cast(int*, ud));  /* number of arguments */
   StkId firstArg = L->top - n;  /* first argument */
   CallInfo *ci = L->ci;
-  if (L->status == LUA_OK)  /* starting a coroutine? */
+  if (L->status == LUA_OK) { /* starting a coroutine? */
+    printf("resume, 不过这是在协程第一执行而不是中途挂起了\n");
     ccall(L, firstArg - 1, LUA_MULTRET, 0);  /* just call its body */
+  }
   else {  /* resuming from previous yield */
     lua_assert(L->status == LUA_YIELD);
     L->status = LUA_OK;  /* mark that it is running (again) */
     if (isLua(ci)) {  /* yielded inside a hook? */
+      printf("resume 继续执行 lua代码 \n");
       L->top = firstArg;  /* discard arguments */
       luaV_execute(L, ci);  /* just continue running Lua code */
     }
     else {  /* 'common' yield */
+      printf("resume 继续执行 c 代码 \n");
       if (ci->u.c.k != NULL) {  /* does it have a continuation function? */
         lua_unlock(L);
         n = (*ci->u.c.k)(L, LUA_YIELD, ci->u.c.ctx); /* call continuation */
@@ -802,6 +821,7 @@ static void resume (lua_State *L, void *ud) {
       }
       luaD_poscall(L, ci, n);  /* finish 'luaD_call' */
     }
+    //继续执行调用链
     unroll(L, NULL);  /* run continuation */
   }
 }
@@ -825,7 +845,7 @@ static int precover (lua_State *L, int status) {
   return status;
 }
 
-
+//设置跳转点, 执行 L 栈上的函数
 LUA_API int lua_resume (lua_State *L, lua_State *from, int nargs,
                                       int *nresults) {
   int status;
@@ -838,14 +858,19 @@ LUA_API int lua_resume (lua_State *L, lua_State *from, int nargs,
   }
   else if (L->status != LUA_YIELD)  /* ended with errors? */
     return resume_error(L, "cannot resume dead coroutine", nargs);
+
+  //继承 c 调用栈的数量, 为了更好的防止调用栈溢出, 并且设置为可挂起
   L->nCcalls = (from) ? getCcalls(from) : 0;
   if (getCcalls(L) >= LUAI_MAXCCALLS)
     return resume_error(L, "C stack overflow", nargs);
   L->nCcalls++;
   luai_userstateresume(L, nargs);
   api_checknelems(L, (L->status == LUA_OK) ? nargs + 1 : nargs);
+  //保护模式执行, 主要是在这里设置跳出点
   status = luaD_rawrunprotected(L, resume, &nargs);
+  printf("lua_resume luaD_rawrunprotected执行结束 status == LUA_YIELD? %d\n", status == LUA_YIELD);
    /* continue running after recoverable errors */
+   // precover 负责在执行出错时继续执行
   status = precover(L, status);
   if (l_likely(!errorstatus(status)))
     lua_assert(status == L->status);  /* normal end or yield */
@@ -865,7 +890,11 @@ LUA_API int lua_isyieldable (lua_State *L) {
   return yieldable(L);
 }
 
-
+/**
+ * 协程挂起,将 n 个参数作为返回值从最近执行 resume 的地方返回(通过 longjmp跳转)
+ * ctx 和 k 两个参数是 c 函数挂起用的, 因为 c 函数无法像 lua 函数那样, 回到挂起的地方继续执行,
+ * 所以提供了延续函数 k 以及参数 ctx 作为恢复时的调用
+ */
 LUA_API int lua_yieldk (lua_State *L, int nresults, lua_KContext ctx,
                         lua_KFunction k) {
   CallInfo *ci;
@@ -873,6 +902,7 @@ LUA_API int lua_yieldk (lua_State *L, int nresults, lua_KContext ctx,
   lua_lock(L);
   ci = L->ci;
   api_checknelems(L, nresults);
+  //不是所有c函数(比如lua_call)都可以恢复, 只要调用栈上有一个不可恢复的c函数, 就不可以挂起
   if (l_unlikely(!yieldable(L))) {
     if (L != G(L)->mainthread)
       luaG_runerror(L, "attempt to yield across a C-call boundary");
@@ -882,6 +912,7 @@ LUA_API int lua_yieldk (lua_State *L, int nresults, lua_KContext ctx,
   L->status = LUA_YIELD;
   ci->u2.nyield = nresults;  /* save number of results */
   if (isLua(ci)) {  /* inside a hook? */
+    //狗子函数是个特殊情况, 继续执行就行。
     lua_assert(!isLuacode(ci));
     api_check(L, nresults == 0, "hooks cannot yield values");
     api_check(L, k == NULL, "hooks cannot continue after yielding");
@@ -889,6 +920,10 @@ LUA_API int lua_yieldk (lua_State *L, int nresults, lua_KContext ctx,
   else {
     if ((ci->u.c.k = k) != NULL)  /* is there a continuation? */
       ci->u.c.ctx = ctx;  /* save context */
+      
+    //lua脚本执行 coroutine.yield, 因为 yield 是个 c 函数, 所以走的这个分支
+    printf("lua_yieldk 来自c 函数的挂起, status %d\n", L->status);
+    //跳到上一次保存点
     luaD_throw(L, LUA_YIELD);
   }
   lua_assert(ci->callstatus & CIST_HOOKED);  /* must be inside a hook */

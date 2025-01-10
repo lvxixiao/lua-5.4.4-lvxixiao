@@ -226,6 +226,10 @@ static void poptbclist (lua_State *L) {
 ** Close all upvalues and to-be-closed variables up to the given stack
 ** level.
 */
+/**
+ * 函数的关闭逻辑
+ * 将超过栈顶的开放 upvalue 转为 关闭upvalue, 调用 to-be-closed 变量的 __close 方法
+ */
 void luaF_close (lua_State *L, StkId level, int status, int yy) {
   ptrdiff_t levelrel = savestack(L, level);
   luaF_closeupval(L, level);  /* first, close the upvalues */

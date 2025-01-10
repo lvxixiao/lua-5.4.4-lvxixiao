@@ -11,6 +11,7 @@
 
 
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "lua.h"
 
@@ -35,7 +36,13 @@ static int auxresume (lua_State *L, lua_State *co, int narg) {
     lua_pushliteral(L, "too many arguments to resume");
     return -1;  /* error flag */
   }
+  //复制参数到 co 的数据栈
   lua_xmove(L, co, narg);
+  /**
+   * 以c线程层面其实并没有所谓挂起, lua_resume 是去执行 co 栈上的函数了,
+   * lua调用 yeild 则表示其返回了, 这也是为什么只能返回到最近一个调用 resume 代码的原因, 
+   * 因为最近一个跳转点是 lua_resume 设置的
+  */
   status = lua_resume(co, L, narg, &nres);
   if (l_likely(status == LUA_OK || status == LUA_YIELD)) {
     if (l_unlikely(!lua_checkstack(L, nres + 1))) {
@@ -43,6 +50,7 @@ static int auxresume (lua_State *L, lua_State *co, int narg) {
       lua_pushliteral(L, "too many results to resume");
       return -1;  /* error flag */
     }
+    //co的返回值复制到L
     lua_xmove(co, L, nres);  /* move yielded values */
     return nres;
   }
@@ -54,9 +62,11 @@ static int auxresume (lua_State *L, lua_State *co, int narg) {
 
 
 static int luaB_coresume (lua_State *L) {
+  printf("coroutine.resume 调用\n");
   lua_State *co = getco(L);
   int r;
   r = auxresume(L, co, lua_gettop(L) - 1);
+  printf("coroutine.resume 结束 r=%d\n", r);
   if (l_unlikely(r < 0)) {
     lua_pushboolean(L, 0);
     lua_insert(L, -2);
@@ -110,7 +120,10 @@ static int luaB_cowrap (lua_State *L) {
 
 
 static int luaB_yield (lua_State *L) {
-  return lua_yield(L, lua_gettop(L));
+  printf("coroutine.yield 调用\n");
+  int i = lua_yield(L, lua_gettop(L));
+  printf("coroutine.yield 调用结束\n");
+  return i;
 }
 
 

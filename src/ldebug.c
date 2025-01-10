@@ -13,6 +13,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "lua.h"
 
@@ -316,7 +317,7 @@ static void collectvalidlines (lua_State *L, Closure *f) {
 }
 
 
-static const char *getfuncname (lua_State *L, CallInfo *ci, const char **name) {
+const char *getfuncname (lua_State *L, CallInfo *ci, const char **name) {
   /* calling function is a known function? */
   if (ci != NULL && !(ci->callstatus & CIST_TAIL))
     return funcnamefromcall(L, ci->previous, name);

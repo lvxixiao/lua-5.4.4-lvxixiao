@@ -1,7 +1,11 @@
 {
     "files.associations": {
         "type_traits": "c",
-        "ljumptab.h": "c"
+        "ljumptab.h": "c",
+        "cmath": "c",
+        "climits": "cpp",
+        "typeinfo": "c",
+        "cstdlib": "c"
     },
     "editor.snippetSuggestions": "bottom"
 }

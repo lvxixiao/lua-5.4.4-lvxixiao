@@ -811,6 +811,7 @@ void luaV_finishOp (lua_State *L) {
   StkId base = ci->func + 1;
   Instruction inst = *(ci->u.l.savedpc - 1);  /* interrupted instruction */
   OpCode op = GET_OPCODE(inst);
+  // printf("luaV_finishOp %d\n", op);
   switch (op) {  /* finish its execution */
     case OP_MMBIN: case OP_MMBINI: case OP_MMBINK: {
       setobjs2s(L, base + GETARG_A(*(ci->u.l.savedpc - 2)), --L->top);
@@ -1150,7 +1151,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
  returning:  /* trap already set */
   cl = clLvalue(s2v(ci->func));
   k = cl->p->k; //常量表
-  printf("常量表数量 %d\n", cl->p->sizek);
+  // printf("常量表数量 %d\n", cl->p->sizek);
   pc = ci->u.l.savedpc; //当前执行的指令
   if (l_unlikely(trap)) {
     if (pc == cl->p->code) {  /* first instruction (not resuming)? */
@@ -1177,7 +1178,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
     /* invalidate top for instructions not expecting it */
     lua_assert(isIT(i) || (cast_void(L->top = base), 1));
     // print("hello world") opcode 顺序 OP_VARARGPREP, OP_GETTABUP, OP_LOADK, OP_CALL, OP_RETURN
-    printf("luaV_execute i=%d GETARG_A(i)=%d, code = %d %d \n", i, GETARG_A(i), GET_OPCODE(i), OP_RETURN);
+    // printf("luaV_execute code = %d return code %d \n", GET_OPCODE(i), OP_RETURN);
     vmdispatch (GET_OPCODE(i)) {
       vmcase(OP_MOVE) {
         setobjs2s(L, ra, RB(i));
@@ -1186,19 +1187,19 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
       vmcase(OP_LOADI) {
         lua_Integer b = GETARG_sBx(i);
         setivalue(s2v(ra), b);
-        printf("OP_LOADI b:%lld ra_val:%lld rd_p:%p\n", b, ivalue(s2v(ra)), ra);
+        // printf("OP_LOADI b:%lld ra_val:%lld rd_p:%p\n", b, ivalue(s2v(ra)), ra);
         vmbreak;
       }
       vmcase(OP_LOADF) {
         int b = GETARG_sBx(i);
-        printf("OP_LOADF b:%d\n", b);
+        // printf("OP_LOADF b:%d\n", b);
         setfltvalue(s2v(ra), cast_num(b));
         vmbreak;
       }
       vmcase(OP_LOADK) {
         TValue *rb = k + GETARG_Bx(i);
         // printf("OP_LOADK 从常量表获取数据 %s, bx:%d\n", getstr(tsvalue(rb)), GETARG_Bx(i));
-        printf("OP_LOADK 从常量表获取数据 a:%d, bx:%d\n", GETARG_A(i), GETARG_Bx(i));
+        // printf("OP_LOADK 从常量表获取数据 a:%d, bx:%d\n", GETARG_A(i), GETARG_Bx(i));
         setobj2s(L, ra, rb);
         vmbreak;
       }
@@ -1244,7 +1245,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         TValue *upval = cl->upvals[GETARG_B(i)]->v;
         TValue *rc = KC(i);
         TString *key = tsvalue(rc);  /* key must be a string */
-        printf("从 upvalue中的 table获取值 OP_GETTABUP index a=%d b=%d c=%d %s\n", GETARG_A(i), GETARG_B(i), GETARG_C(i), getstr(tsvalue(rc)));
+        // printf("从 upvalue中的 table获取值 OP_GETTABUP index a=%d b=%d c=%d %s\n", GETARG_A(i), GETARG_B(i), GETARG_C(i), getstr(tsvalue(rc)));
         if (luaV_fastget(L, upval, key, slot, luaH_getshortstr)) {
           setobj2s(L, ra, slot);
         }
@@ -1678,6 +1679,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         }
       }
       vmcase(OP_RETURN) {
+        printf("OP_RETURN a:%d, b:%d, c:%d\n", GETARG_A(i), GETARG_B(i), GETARG_C(i));
         int n = GETARG_B(i) - 1;  /* number of results */
         int nparams1 = GETARG_C(i);
         if (n < 0)  /* not fixed? */
@@ -1699,6 +1701,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         goto ret;
       }
       vmcase(OP_RETURN0) {
+        printf("OP_RETURN0\n");
         if (l_unlikely(L->hookmask)) {
           L->top = ra;
           savepc(ci);
@@ -1715,6 +1718,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         goto ret;
       }
       vmcase(OP_RETURN1) {
+        printf("OP_RETURN1\n");
         if (l_unlikely(L->hookmask)) {
           L->top = ra + 1;
           savepc(ci);
@@ -1821,6 +1825,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         vmbreak;
       }
       vmcase(OP_CLOSURE) {
+        printf("OP_CLOSURE, bx=%d\n", GETARG_Bx(i));
         Proto *p = cl->p->p[GETARG_Bx(i)];
         halfProtect(pushclosure(L, p, cl->upvals, base, ra));
         checkGC(L, ra + 1);
@@ -1833,7 +1838,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
       }
       vmcase(OP_VARARGPREP) {
         //先 oncall, 再 OP_VARARGPREP
-        printf("OP_VARARGPREP ra:%d\n", GETARG_A(i));
+        // printf("OP_VARARGPREP ra:%d\n", GETARG_A(i));
         ProtectNT(luaT_adjustvarargs(L, GETARG_A(i), ci, cl->p));
         if (l_unlikely(trap)) {  /* previous "Protect" updated trap */
           luaD_hookcall(L, ci);
